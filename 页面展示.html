@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>林诗剑 | 从拆解到验证</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #3b82f6;
+      --primary-dark: #1d4ed8;
+      --primary-bg: #eff6ff;
+      --primary-subtle: #dbeafe;
+      --text-main: #1e293b;
+      --text-secondary: #64748b;
+      --text-light: #94a3b8;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.07);
+      --radius: 14px;
+      --sidebar-w: 260px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Background blobs ── */
+    .page-bg {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; z-index: 0; overflow: hidden;
+    }
+    .page-bg::before {
+      content: ''; position: absolute;
+      top: -100px; right: -60px;
+      width: 420px; height: 420px; border-radius: 50%;
+      background: radial-gradient(circle, var(--primary-subtle) 0%, transparent 70%);
+      opacity: 0.4; animation: floatBlob 20s ease-in-out infinite;
+    }
+    .page-bg::after {
+      content: ''; position: absolute;
+      bottom: -80px; left: -80px;
+      width: 340px; height: 340px; border-radius: 50%;
+      background: radial-gradient(circle, #e0e7ff 0%, transparent 70%);
+      opacity: 0.35; animation: floatBlob 24s ease-in-out infinite reverse;
+    }
+    @keyframes floatBlob {
+      0%, 100% { transform: translate(0,0) scale(1); }
+      33% { transform: translate(30px,-20px) scale(1.05); }
+      66% { transform: translate(-20px,15px) scale(0.95); }
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed; top: 0; left: 0;
+      width: var(--sidebar-w); height: 100vh;
+      background: var(--bg-card);
+      border-right: 1px solid #e2e8f0;
+      padding: 36px 0 36px 0;
+      z-index: 50;
+      overflow-y: auto;
+      transition: transform 0.3s ease;
+    }
+    .sidebar-author {
+      padding: 0 24px 20px;
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 16px;
+    }
+    .sidebar-author .name {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 16px; font-weight: 700; color: var(--text-main);
+    }
+    .sidebar-author .role {
+      font-size: 12px; color: var(--text-light); margin-top: 2px;
+    }
+
+    .sidebar-nav {}
+    .nav-group { margin-bottom: 6px; }
+    .nav-group-title {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 24px;
+      font-size: 14px; font-weight: 600; color: var(--text-main);
+      cursor: pointer; user-select: none;
+      transition: background 0.15s;
+      text-decoration: none;
+    }
+    .nav-group-title:hover { background: var(--primary-bg); }
+    .nav-group-title.active { color: var(--primary); }
+    .nav-group-title .arrow {
+      width: 16px; height: 16px;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+      color: var(--text-light);
+    }
+    .nav-group.open .arrow { transform: rotate(90deg); }
+    .nav-children {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .nav-group.open .nav-children { max-height: 500px; }
+    .nav-child {
+      display: block;
+      padding: 7px 24px 7px 44px;
+      font-size: 13px; color: var(--text-secondary);
+      text-decoration: none;
+      transition: all 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .nav-child:hover {
+      color: var(--primary); background: var(--primary-bg);
+    }
+    .nav-child.active {
+      color: var(--primary); border-left-color: var(--primary);
+      background: var(--primary-bg); font-weight: 500;
+    }
+
+    /* ── Mobile sidebar toggle ── */
+    .sidebar-toggle {
+      display: none;
+      position: fixed; top: 16px; left: 16px; z-index: 60;
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--bg-card); border: 1px solid #e2e8f0;
+      box-shadow: var(--shadow-sm);
+      cursor: pointer; align-items: center; justify-content: center;
+    }
+    .sidebar-toggle svg { width: 20px; height: 20px; color: var(--text-main); }
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.3); z-index: 45;
+    }
+
+    /* ── Main content ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      position: relative; z-index: 1;
+    }
+    .container {
+      max-width: 820px; margin: 0 auto; padding: 48px 28px 40px;
+    }
+
+    /* ── Fade-in ── */
+    .fade-in {
+      opacity: 0; transform: translateY(28px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── Project sections ── */
+    .project-section { margin-bottom: 56px; }
+
+    .project-header {
+      background: var(--bg-card); border-radius: var(--radius);
+      padding: 28px 32px; box-shadow: var(--shadow-sm);
+      border: 1px solid #e2e8f0; margin-bottom: 18px;
+    }
+    .project-header h2 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 24px; font-weight: 700; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .project-header h2::before {
+      content: ''; width: 4px; height: 24px;
+      background: var(--primary); border-radius: 2px; flex-shrink: 0;
+    }
+    .project-oneliner {
+      font-size: 14.5px; color: var(--text-secondary);
+      line-height: 1.7; margin-bottom: 16px;
+    }
+    .project-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .github-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 10px;
+      background: var(--text-main); color: white; text-decoration: none;
+      font-size: 14px; font-weight: 500;
+      transition: all 0.25s ease; border: 1px solid var(--text-main);
+    }
+    .github-btn:hover {
+      background: #000; transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .github-btn svg { width: 18px; height: 18px; }
+    .session-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 20px; border-radius: 10px;
+      background: var(--bg-card); color: var(--primary); text-decoration: none;
+      font-size: 13px; font-weight: 500;
+      transition: all 0.25s ease; border: 1px solid var(--primary-subtle);
+    }
+    .session-btn:hover {
+      background: var(--primary-bg); transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(37,99,235,0.12);
+    }
+    .session-btn svg { width: 16px; height: 16px; }
+
+    /* ── Article body ── */
+    .article-body {
+      background: var(--bg-card); border-radius: var(--radius);
+      padding: 36px 36px; box-shadow: var(--shadow-sm);
+      border: 1px solid #e2e8f0;
+    }
+    .section-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 20px; font-weight: 700; color: var(--text-main);
+      margin-top: 36px; margin-bottom: 16px;
+      padding-left: 14px; border-left: 3px solid var(--primary);
+    }
+    .article-body .section-title:first-child { margin-top: 0; }
+    .sub-title {
+      font-size: 16px; font-weight: 600; color: var(--text-main);
+      margin-top: 24px; margin-bottom: 10px;
+    }
+    .desc-label {
+      font-size: 13px; font-weight: 600; color: var(--primary);
+      text-transform: uppercase; letter-spacing: 1.5px;
+      margin-top: 24px; margin-bottom: 6px;
+    }
+    .article-body p {
+      font-size: 14.5px; color: var(--text-secondary);
+      line-height: 1.85; margin-bottom: 14px;
+    }
+    .article-body p:last-child { margin-bottom: 0; }
+    .article-body strong { color: var(--text-main); font-weight: 600; }
+    .article-body code {
+      background: var(--primary-bg); color: var(--primary-dark);
+      font-size: 13px; padding: 2px 7px; border-radius: 5px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .article-body ul, .article-body ol { padding-left: 20px; margin-bottom: 14px; }
+    .article-body ul li, .article-body ol li {
+      font-size: 14.5px; color: var(--text-secondary);
+      line-height: 1.85; margin-bottom: 6px;
+    }
+    .article-body ul li strong, .article-body ol li strong { color: var(--text-main); }
+
+    /* ── Image Figure ── */
+    .fig {
+      margin: 20px 0; border-radius: 10px; overflow: hidden;
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+    }
+    .fig-img-wrapper {
+      position: relative; width: 100%; min-height: 120px;
+      background: linear-gradient(135deg, var(--primary-bg) 0%, #e0e7ff 100%);
+    }
+    .fig-img-wrapper::before {
+      content: '加载中…'; position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-light); font-size: 13px;
+      z-index: 1; pointer-events: none; transition: opacity 0.3s;
+    }
+    .fig-img-wrapper.loaded::before { opacity: 0; }
+    .fig-img-wrapper.error::before {
+      content: '图片加载失败，点击重试';
+      color: var(--text-secondary); cursor: pointer; pointer-events: auto;
+    }
+    .fig img {
+      width: 100%; display: block;
+      position: relative; z-index: 2;
+      opacity: 0; transition: opacity 0.4s ease;
+    }
+    .fig-img-wrapper.loaded img { opacity: 1; }
+    .fig-caption {
+      padding: 10px 16px; font-size: 12.5px; color: var(--text-light);
+      text-align: center; background: #f8fafc; border-top: 1px solid #e2e8f0;
+    }
+
+    /* ── Table ── */
+    .article-table {
+      width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13.5px;
+    }
+    .article-table th {
+      background: var(--primary-bg); color: var(--primary-dark);
+      font-weight: 600; padding: 10px 14px; text-align: left;
+      border-bottom: 2px solid var(--primary-subtle); white-space: nowrap;
+    }
+    .article-table td {
+      padding: 9px 14px; color: var(--text-secondary);
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .article-table tr:last-child td { border-bottom: none; }
+    .article-table tbody tr:hover { background: #f8fafc; }
+
+    /* ── Section divider ── */
+    .section-divider {
+      width: 100%; height: 1px; background: #e2e8f0;
+      margin: 0 0 56px; position: relative;
+    }
+    .section-divider::after {
+      content: '✦'; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      background: var(--bg-page); padding: 0 16px;
+      color: var(--text-light); font-size: 14px;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 48px; padding-top: 28px; border-top: 1px solid #e2e8f0;
+      text-align: center;
+    }
+    .footer-left { color: var(--text-light); font-size: 13px; }
+
+    /* ── Lightbox ── */
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.85);
+      align-items: center; justify-content: center;
+      padding: 40px; cursor: zoom-out; animation: lbFadeIn 0.25s ease;
+    }
+    .lightbox.open { display: flex; }
+    @keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .lightbox img {
+      max-width: 90vw; max-height: 85vh; border-radius: 8px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4); cursor: default;
+    }
+    .lightbox-close {
+      position: absolute; top: 20px; right: 24px;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); border: none; color: white;
+      font-size: 22px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .lightbox-close:hover { background: rgba(255,255,255,0.3); }
+
+    /* ── Responsive ── */
+    .print-toc { display: none; }
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-toggle { display: flex; }
+      .sidebar-overlay.open { display: block; }
+      .main { margin-left: 0; }
+      .container { padding: 64px 18px 28px; }
+    }
+    @media (max-width: 480px) {
+      .project-header h2 { font-size: 20px; }
+      .article-body { padding: 24px 20px; }
+      .section-title { font-size: 18px; }
+      .github-btn, .session-btn { width: 100%; justify-content: center; }
+      .project-actions { flex-direction: column; }
+      .article-table { font-size: 12px; }
+      .article-table th, .article-table td { padding: 7px 8px; }
+    }
+
+    /* ══════════════════════════════════════════════
+       PRINT STYLES
+       ══════════════════════════════════════════════ */
+    @media print {
+      @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: white !important; font-size: 11pt; line-height: 1.65; color: #1e293b !important; }
+      .page-bg, .sidebar, .sidebar-toggle, .sidebar-overlay, .lightbox, .github-btn svg, .session-btn svg { display: none !important; }
+      .fade-in { opacity: 1 !important; transform: none !important; transition: none !important; }
+      .main { margin-left: 0 !important; }
+      .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+      .print-toc {
+        display: block !important; page-break-after: always; padding: 0;
+      }
+      .print-toc-header { font-family: 'Noto Serif SC', serif; font-size: 26pt; font-weight: 700; color: var(--text-main); margin-bottom: 6px; }
+      .print-toc-subtitle { font-size: 13pt; color: var(--text-secondary); margin-bottom: 36px; padding-bottom: 20px; border-bottom: 2px solid var(--primary); }
+      .print-toc-group { margin-bottom: 20px; }
+      .print-toc-group-title { font-family: 'Noto Serif SC', serif; font-size: 13pt; font-weight: 700; color: var(--primary-dark); margin-bottom: 6px; padding-left: 12px; border-left: 3px solid var(--primary); }
+      .print-toc-item { font-size: 10.5pt; color: var(--text-secondary); padding: 3px 0 3px 16px; line-height: 1.6; }
+      .project-section { page-break-before: always; margin-bottom: 24px !important; }
+      .section-divider { display: none !important; }
+      .project-header { background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 0 14px 0 !important; margin-bottom: 20px !important; border-bottom: 2px solid var(--primary) !important; }
+      .project-header h2 { font-size: 17pt !important; margin-bottom: 0 !important; }
+      .project-header h2::before { display: none !important; }
+      .project-actions { margin-top: 8px; }
+      .github-btn, .session-btn { background: none !important; border: 1px solid #cbd5e1 !important; color: var(--text-secondary) !important; font-size: 9pt !important; padding: 4px 10px !important; border-radius: 4px !important; text-decoration: none !important; }
+      .github-btn::after, .session-btn::after { content: " ↗ " attr(href); font-size: 8pt; color: var(--text-light); word-break: break-all; }
+      .article-body { background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
+      .section-title { font-size: 14pt !important; margin-top: 24px !important; margin-bottom: 10px !important; page-break-after: avoid; }
+      .sub-title { font-size: 12pt !important; margin-top: 18px !important; margin-bottom: 8px !important; page-break-after: avoid; }
+      .article-body p { font-size: 10.5pt !important; line-height: 1.7 !important; margin-bottom: 10px !important; orphans: 3; widows: 3; }
+      .article-body ul li, .article-body ol li { font-size: 10.5pt !important; line-height: 1.7 !important; }
+      .article-body code { font-size: 9.5pt !important; border: 1px solid #e2e8f0; }
+      .article-table { page-break-inside: avoid; font-size: 9.5pt !important; margin: 14px 0 !important; }
+      .article-table th { font-size: 9.5pt !important; padding: 7px 10px !important; background: var(--primary-bg) !important; }
+      .article-table td { padding: 6px 10px !important; font-size: 9.5pt !important; }
+      .fig { page-break-inside: avoid; margin: 14px 0 !important; }
+      .fig-img-wrapper { background: none !important; min-height: auto !important; }
+      .fig-img-wrapper::before { display: none !important; }
+      .fig img { opacity: 1 !important; width: 100% !important; max-width: 100% !important; max-height: none !important; height: auto !important; object-fit: contain; }
+      .fig-caption { font-size: 8.5pt !important; padding: 6px 10px !important; background: #f8fafc !important; }
+      .footer { margin-top: 32px !important; padding-top: 16px !important; border-top: 1px solid #cbd5e1 !important; }
+      .footer-left { font-size: 9pt !important; }
+      h2, h3, h4, .desc-label { page-break-after: avoid !important; }
+      .fig, .article-table, blockquote { page-break-inside: avoid !important; }
+      p { orphans: 3; widows: 3; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-bg"></div>
+
+  <!-- ═══ Mobile toggle ═══ -->
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="展开目录">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ═══ Sidebar ═══ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-author">
+      <div class="name">林诗剑</div>
+      <div class="role">从拆解到验证</div>
+    </div>
+    <nav class="sidebar-nav">
+
+      <!-- 事情背景 -->
+      <div class="nav-group open" data-group="s1">
+        <a class="nav-group-title" href="#s1">
+          <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          事情背景
+        </a>
+        <div class="nav-children">
+          <a class="nav-child" href="#s1-bg">核心判断的来源</a>
+          <a class="nav-child" href="#s1-block">遇到的障碍</a>
+        </div>
+      </div>
+
+      <!-- 第一轮实验 -->
+      <div class="nav-group" data-group="s2">
+        <a class="nav-group-title" href="#s2">
+          <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          第一轮实验
+        </a>
+        <div class="nav-children">
+          <a class="nav-child" href="#s2-exp1">实验一：上下文压缩</a>
+          <a class="nav-child" href="#s2-exp2">实验二：搜索过滤</a>
+        </div>
+      </div>
+
+      <!-- 第二轮实验 -->
+      <div class="nav-group" data-group="s3">
+        <a class="nav-group-title" href="#s3">
+          <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          第二轮实验
+        </a>
+        <div class="nav-children">
+          <a class="nav-child" href="#s3-setup">升级为多模型 Benchmark</a>
+          <a class="nav-child" href="#s3-result">结果排序</a>
+          <a class="nav-child" href="#s3-finding">核心发现与失败模式</a>
+        </div>
+      </div>
+
+      <!-- 未解决问题 -->
+      <div class="nav-group" data-group="s4">
+        <a class="nav-group-title" href="#s4">
+          <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          现在还卡在哪
+        </a>
+        <div class="nav-children">
+          <a class="nav-child" href="#s4-attr">Chat vs Reason 归因</a>
+          <a class="nav-child" href="#s4-design">产品设计权衡</a>
+        </div>
+      </div>
+
+    </nav>
+  </aside>
+
+  <!-- ═══ Main Content ═══ -->
+  <div class="main">
+    <div class="container">
+
+      <!-- ═══ Print-only TOC ═══ -->
+      <div class="print-toc">
+        <div class="print-toc-header">林诗剑</div>
+        <div class="print-toc-subtitle">从拆解到验证：用 Coding Agent 搭建多模型能力诊断体系</div>
+        <div class="print-toc-group">
+          <div class="print-toc-group-title">事情背景</div>
+          <div class="print-toc-item">核心判断的来源</div>
+          <div class="print-toc-item">遇到的障碍</div>
+        </div>
+        <div class="print-toc-group">
+          <div class="print-toc-group-title">第一轮：验证 harness 设计的核心判断</div>
+          <div class="print-toc-item">实验一：上下文压缩 ON vs OFF</div>
+          <div class="print-toc-item">实验二：搜索过滤 filtered vs unfiltered</div>
+        </div>
+        <div class="print-toc-group">
+          <div class="print-toc-group-title">第二轮：升级为多模型 Benchmark</div>
+          <div class="print-toc-item">实验设计与结果排序</div>
+          <div class="print-toc-item">核心发现与失败模式</div>
+        </div>
+        <div class="print-toc-group">
+          <div class="print-toc-group-title">现在还卡在哪</div>
+          <div class="print-toc-item">Chat vs Reason 归因模糊</div>
+          <div class="print-toc-item">产品设计权衡</div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════ -->
+      <!--                  Header                      -->
+      <!-- ════════════════════════════════════════════ -->
+      <section class="project-section fade-in" id="s1">
+
+        <div class="project-header">
+          <h2>从拆解到验证：用 Coding Agent 搭建多模型能力诊断体系</h2>
+          <div class="project-oneliner">研究 Claude Code、Codex CLI、OpenClaw 等产品的 runtime 机制后，用实验数据验证核心判断</div>
+          <div class="project-actions">
+            <a class="github-btn" href="https://github.com/LinWenzhaoya/coding-agent-benchmark" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+              查看源码
+            </a>
+            <a class="session-btn" href="./session/第一轮实验session2.html" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              实验一session
+            </a>
+            <a class="session-btn" href="./session/第二轮实验session2.html" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              实验二session
+            </a>
+            </a>
+          </div>
+        </div>
+
+        <div class="article-body">
+
+          <!-- 事情背景 -->
+          <h3 class="section-title" id="s1-bg">事情背景</h3>
+
+          <p>我在研究 Claude Code、Codex CLI、OpenClaw 等产品的 runtime 机制后，形成了几个核心判断——上下文治理的本质是注意力管理而非省 token，工具的核心价值是环境过滤而非功能调用，模型能力和 harness 复杂度之间存在分层关系。但这些判断停留在"读完觉得有道理"的阶段，没有实验数据支撑。</p>
+
+          <h3 class="section-title" id="s1-block">遇到了什么障碍</h3>
+
+          <p>要验证这些判断，需要搭一个 agent 原型、实现工具系统、设计对照实验、批量跑测试、收集 trace 并做跨模型对比。这整条工程闭环以前对我来说很难做到——从"有一个想法"到"拿到可分析的实验数据"中间隔着太多工程环节。纯靠在 LLM 对话里完成也不现实：项目涉及多个文件之间的调用依赖，上下文一长，文件间的接口细节就开始对不上；出了问题也很难定位，因为 LLM 没有办法自己跑测试、看报错、再回去改。</p>
+
+          <p>Claude Code 解决了这个问题。我只需要想清楚实验该怎么设计、变量怎么控制，和它对几轮确认思路，剩下的工程实现和测试执行都交给它在项目目录里直接完成。</p>
+
+        </div>
+      </section>
+
+      <div class="section-divider fade-in"></div>
+
+      <!-- ════════════════════════════════════════════ -->
+      <!--              第一轮实验                      -->
+      <!-- ════════════════════════════════════════════ -->
+      <section class="project-section fade-in" id="s2">
+
+        <div class="project-header">
+          <h2>第一轮：验证 harness 设计的核心判断</h2>
+        </div>
+
+        <div class="article-body">
+
+          <p>我搭了一个 Claude Code 风格的最小 agent 原型（tool loop + 上下文管理 + 6 个工具），在 workspace 里埋了一个跨文件 bug，然后做了两组 A/B 实验。</p>
+
+          <h3 class="section-title" id="s2-exp1">实验一：上下文压缩 ON vs OFF</h3>
+
+          <p>结论清晰——OFF 组 3 次全部失败，agent 陷入死循环，20 步里 18 步在重复相同的失败操作；ON 组 3 次中 2 次成功，路径干净。messages 堆积导致有效信息密度下降，模型注意力被淹没，丧失了"退一步换策略"的能力。核心判断得到验证：<strong>上下文治理是注意力管理。</strong></p>
+
+          <div class="fig">
+            <div class="fig-img-wrapper">
+              <img src="./images/essay-exp1.png" alt="OFF-3 死循环 trace vs ON-1 成功 trace 对比" loading="lazy">
+            </div>
+            <div class="fig-caption">OFF-3 死循环 </div>
+          </div>
+
+          <h3 class="section-title" id="s2-exp2">实验二：搜索过滤 filtered vs unfiltered</h3>
+
+          <p>跨两个模型（moonshot-v1-8k / kimi-k2.5）做测试。弱模型两组都卡在 <code>write_patch</code> 的基础能力上，搜索过滤的差异没机会体现；强模型 filtered 组 3/3 成功，unfiltered 组 2/3 成功，唯一一次失败是信息过载引发的幻觉——<code>read_file</code> 失败后涌入 38,536 chars 的异常数据，模型随即声称已修复 bug 并给出详细"修复方案"，但实际上没有执行任何 <code>write_patch</code>。</p>
+
+          <p>结论：<strong>模型能力和 harness 复杂度是分层关系</strong>——弱模型的瓶颈在基础工具使用，强模型才到信息过滤这一层。不受控的信息涌入增加了幻觉风险，但不是必然导致失败。</p>
+
+          <p>但也正是这里出现了一个新的卡点：kimi-k2.5 太强，当前 bug 难度不够，无法区分模型能力的上限。</p>
+
+        </div>
+      </section>
+
+      <div class="section-divider fade-in"></div>
+
+      <!-- ════════════════════════════════════════════ -->
+      <!--              第二轮实验                      -->
+      <!-- ════════════════════════════════════════════ -->
+      <section class="project-section fade-in" id="s3">
+
+        <div class="project-header">
+          <h2>第二轮：升级为多模型 Benchmark</h2>
+        </div>
+
+        <div class="article-body">
+
+          <h3 class="section-title" id="s3-setup">实验升级</h3>
+
+          <p>针对第一轮的卡点，我做了三件事：将 bug 从简单的类型不匹配升级为<strong>跨模块共享状态污染</strong>（表面 traceback 指向 auth.py，但 auth.py 逻辑完全正确，根因在 routes.py 篡改了全局状态后未恢复）；加入完整的 trace 记录系统；将测试模型扩展到五个（Claude Opus 4.6、DS-V3.2 Chat、DS-V3.2 Reason、GLM5-Turbo、GPT 5.4），每个跑 5 次取分布。其中 DS-V3.2 的 Chat 和 Reason 两个版本共享底座模型，专门用于验证"推理更强是否意味着 agent 更强"。</p>
+
+          <h3 class="section-title" id="s3-result">结果排序</h3>
+
+          <p><strong>Opus 4.6 &gt; DS-V3.2 Chat &gt; GLM5-Turbo &gt; DS-V3.2 Reason &gt; GPT 5.4</strong></p>
+
+          <table class="article-table">
+            <thead>
+              <tr>
+                <th>模型</th><th>成功率</th><th>成功平均步数</th><th>诊断正确率</th><th>核心特征</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Opus 4.6</strong></td><td>4/5</td><td>13.75</td><td>4/5</td><td>稳定高效，推理-执行-推进三项均衡</td></tr>
+              <tr><td><strong>DS-V3.2 Chat</strong></td><td>4/5</td><td>21.75</td><td>5/5</td><td>成功率并列但效率低一档，决策阈值偏高</td></tr>
+              <tr><td><strong>GLM5-Turbo</strong></td><td>2/5</td><td>16</td><td>2/5</td><td>底层能力够用，但工具参数幻觉是系统性缺陷</td></tr>
+              <tr><td><strong>DS-V3.2 Reason</strong></td><td>1/5</td><td>17</td><td>5/5</td><td>诊断全对但几乎不执行，典型的执行幻觉</td></tr>
+              <tr><td><strong>GPT 5.4</strong></td><td>0/5</td><td>—</td><td>4/5</td><td>诊断正确但系统性等待用户确认，行为范式错位</td></tr>
+            </tbody>
+          </table>
+
+          <div class="fig">
+            <div class="fig-img-wrapper">
+              <img src="./images/essay-reason-conflict.png" alt="DS-V3.2 Reason FINAL ANSWER 与 validation 矛盾" loading="lazy">
+            </div>
+            <div class="fig-caption">DS-V3.2 Reason — FINAL ANSWER 声称"已修复" vs post-run validation 显示测试仍失败</div>
+          </div>
+
+          <h3 class="section-title" id="s3-finding">核心发现与失败模式</h3>
+
+          <p><strong>Agent 能力 ≠ 推理能力。</strong> 这是最重要的结论。DS-V3.2 Reason 诊断正确率 100% 但完成率仅 20%；GPT 5.4 诊断正确率 80% 但完成率 0%。推理能力与任务完成率之间是非线性关系。Agent 能力至少由三个独立维度构成：跨文件重建因果链的<strong>推理能力</strong>、把方案可靠序列化为工具调用的<strong>执行能力</strong>、无需用户确认时持续推进的<strong>行为范式</strong>。三项缺一不可，且未表现出稳定正相关。</p>
+
+          <p><strong>同底座模型，Chat 显著优于 Reason。</strong> DS-V3.2 Chat 80% vs Reason 20%，差距 4 倍。Reason 更长的推理链不仅没带来更高完成率，反而导致格式冲突和执行幻觉。</p>
+
+          <p>失败模式归纳为四类：</p>
+
+          <table class="article-table">
+            <thead>
+              <tr><th>类型</th><th>表现</th><th>代表 case</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>探索策略失误</strong></td>
+                <td>推理和工具正常，但读取策略不当导致错过信息或步数耗尽</td>
+                <td>Opus Run 2、DS Chat Run 3</td>
+              </tr>
+              <tr>
+                <td><strong>行为范式错位</strong></td>
+                <td>诊断正确，知道自己没修复，但主动等待用户确认</td>
+                <td>GPT 5.4 全部 Run</td>
+              </tr>
+              <tr>
+                <td><strong>执行幻觉</strong></td>
+                <td>诊断正确，声称已修复但实际未调用 write_patch</td>
+                <td>DS Reason Run 1/3/4/5</td>
+              </tr>
+              <tr>
+                <td><strong>工具参数幻觉</strong></td>
+                <td>参数注入垃圾内容，上下文膨胀甚至系统崩溃</td>
+                <td>GLM5 Run 1/3/5</td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </section>
+
+      <div class="section-divider fade-in"></div>
+
+      <!-- ════════════════════════════════════════════ -->
+      <!--              现在还卡在哪                    -->
+      <!-- ════════════════════════════════════════════ -->
+      <section class="project-section fade-in" id="s4">
+
+        <div class="project-header">
+          <h2>现在还卡在哪</h2>
+        </div>
+
+        <div class="article-body">
+
+          <h3 class="section-title" id="s4-attr">Chat vs Reason 的归因模糊</h3>
+
+          <p>当前最核心的未解决问题是 <strong>Chat vs Reason 的归因模糊</strong>。</p>
+
+          <p>DS-V3.2 Reason 完成率只有 20%，表面上看是执行幻觉——模型推理到了正确答案却没有正确调用工具。但我的 system prompt 要求输出必须以 <code>TOOL:</code> 或 <code>FINAL:</code> 开头，这与 Reason 模型先输出内部推理链再输出行动的原生格式直接冲突。格式遵循本身确实是模型能力的一部分，但问题是：如果换一种对 Reason 更友好的格式约束（比如允许先输出 thinking 再输出 action），完成率会不会大幅提升？</p>
+
+          <p>如果会，那 20% 的低完成率有很大一部分是 harness 设计导致的，不是模型本身的 agent 能力不足。如果换了格式完成率依然很低，才能下"Reason 不适合 agent 场景"的结论。目前的实验数据无法区分这两种情况。</p>
+
+          <h3 class="section-title" id="s4-design">产品设计权衡</h3>
+
+          <p>这个归因问题背后指向一个更深层的产品设计权衡：<strong>agent 的 runtime 应该适配模型的原生行为模式，还是要求模型适配统一的格式规范？</strong>前者意味着要为不同类型的模型设计不同的 parser，工程复杂度上升；后者意味着可能系统性地低估某类模型的真实能力。对于要支持多模型接入的 agent 产品来说，这不是一个可以回避的问题。</p>
+
+          <p>要解决这个卡点，需要设计一组控制了格式变量的对照实验：在对 Reason 模型更友好的格式约束下重新跑一轮 benchmark，与当前结果做对比。但"更友好"的格式约束本身怎么定义、如何保证与 Chat 版本的对比仍然公平，这是我还在思考的问题。</p>
+
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <div class="footer fade-in">
+        <div class="footer-left">林诗剑 · 从拆解到验证</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox-close" aria-label="关闭">&times;</button>
+    <img src="" alt="放大查看">
+  </div>
+
+  <script>
+    // ── Sidebar toggle (mobile) ──
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    const overlay = document.getElementById('sidebarOverlay');
+
+    toggle.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    });
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+
+    // ── Nav group expand/collapse ──
+    document.querySelectorAll('.nav-group-title').forEach(title => {
+      title.addEventListener('click', (e) => {
+        e.preventDefault();
+        const group = title.parentElement;
+        group.classList.toggle('open');
+        const href = title.getAttribute('href');
+        if (href && href !== '#') {
+          const target = document.querySelector(href);
+          if (target) {
+            setTimeout(() => {
+              target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+          }
+        }
+        if (window.innerWidth <= 900) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('open');
+        }
+      });
+    });
+
+    document.querySelectorAll('.nav-child').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 900) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('open');
+        }
+      });
+    });
+
+    // ── Active nav highlight on scroll ──
+    const sections = document.querySelectorAll('[id^="s"]');
+    const navChildren = document.querySelectorAll('.nav-child');
+    const navGroupTitles = document.querySelectorAll('.nav-group-title');
+
+    function updateActiveNav() {
+      let current = '';
+      sections.forEach(sec => {
+        const top = sec.getBoundingClientRect().top;
+        if (top <= 120) current = sec.id;
+      });
+
+      navChildren.forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+      });
+
+      const groupId = current ? current.split('-')[0] : '';
+      navGroupTitles.forEach(t => {
+        t.classList.toggle('active', t.getAttribute('href') === '#' + groupId);
+      });
+    }
+    window.addEventListener('scroll', updateActiveNav, { passive: true });
+
+    // ── Image loading states ──
+    document.querySelectorAll('.fig-img-wrapper').forEach(wrapper => {
+      const img = wrapper.querySelector('img');
+      img.addEventListener('load', () => wrapper.classList.add('loaded'));
+      img.addEventListener('error', () => wrapper.classList.add('error'));
+      wrapper.addEventListener('click', () => {
+        if (wrapper.classList.contains('error')) {
+          wrapper.classList.remove('error');
+          const src = img.src;
+          img.src = '';
+          img.src = src + (src.includes('?') ? '&' : '?') + 't=' + Date.now();
+        }
+      });
+      if (img.complete && img.naturalWidth > 0) wrapper.classList.add('loaded');
+    });
+
+    // ── Lightbox ──
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = lightbox.querySelector('img');
+
+    document.querySelectorAll('.fig img').forEach(img => {
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', () => {
+        if (img.closest('.fig-img-wrapper').classList.contains('loaded')) {
+          lightboxImg.src = img.src;
+          lightbox.classList.add('open');
+        }
+      });
+    });
+    lightbox.addEventListener('click', e => {
+      if (e.target !== lightboxImg) lightbox.classList.remove('open');
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') lightbox.classList.remove('open');
+    });
+
+    // ── Scroll fade-in ──
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) entry.target.classList.add('visible');
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+    document.querySelectorAll('.fade-in').forEach((el, i) => {
+      el.style.transitionDelay = `${i * 0.07}s`;
+      observer.observe(el);
+    });
+  </script>
+</body>
+</html>
